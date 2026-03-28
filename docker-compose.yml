@@ -46,7 +46,7 @@ services:
   # API Gateway Node.js + Prisma
   api-gateway:
     build:
-      context: ./api-gateway
+      context: ./ivorioci-gateway
       dockerfile: Dockerfile
       target: production
     container_name: api-gateway
