@@ -1,40 +1,28 @@
-# ─── Stage 1 : Build ──────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY prisma/ ./prisma/
-COPY prisma.config.ts ./
-
+COPY package.json package-lock.json ./
 RUN npm ci
 
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+COPY tsconfig.json ./
+COPY src ./src
+
 RUN npx prisma generate
-
-COPY tsconfig*.json ./
-COPY src/ ./src/
-
 RUN npm run build
 
-
-# ─── Stage 2 : Production ─────────────────────────────────────────────────────
-FROM node:22-alpine AS production
-
+FROM node:20-alpine AS runner
 WORKDIR /app
-
 ENV NODE_ENV=production
 
-COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
+COPY package.json package-lock.json ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
-COPY prisma.config.ts ./
-RUN npx prisma generate
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
+RUN npm prune --production
 
 EXPOSE 3000
-
 CMD ["node", "dist/server.js"]

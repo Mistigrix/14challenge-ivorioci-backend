@@ -1,82 +1,67 @@
-services:
+version: "3.9"
 
-  # Base de données PostgreSQL
-  postgres:
-    image: postgres:17-alpine
-    container_name: postgres
+services:
+  db:
+    image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB:       ${POSTGRES_DB:-appdb}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
     networks:
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-appdb}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      - ivorioci-network
 
-  # Microservice Go
-  ivorioci-stream-service:
+  stream-service:
     build:
       context: ./ivorioci-stream-service
       dockerfile: Dockerfile
-      target: production
-    container_name: ivorioci-stream-service
-    restart: unless-stopped
-    environment:
-      PORT:         8080
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-appdb}?sslmode=disable
-    networks:
-      - internal
     depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "/service", "-healthcheck"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - db
+    environment:
+      PORT: ${STREAM_PORT}
+      GO_ENV: ${GO_ENV}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      VIDEO_STORAGE_PATH: ${VIDEO_STORAGE_PATH}
+      THUMBNAIL_STORAGE_PATH: ${THUMBNAIL_STORAGE_PATH}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+    ports:
+      - "${STREAM_PORT}:${STREAM_PORT}"
+    volumes:
+      - stream_videos:/app/storage/videos
+      - stream_thumbnails:/app/storage/thumbnails
+    networks:
+      - ivorioci-network
 
-  # API Gateway Node.js + Prisma
-  api-gateway:
+  gateway:
     build:
       context: ./ivorioci-gateway
       dockerfile: Dockerfile
-      target: production
-    container_name: api-gateway
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV:          production
-      PORT:              3000
-      DATABASE_URL:      postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-appdb}?sslmode=disable
-      MICROSERVICE_URL:  http://ivorioci-stream-service:8080
-    networks:
-      - internal
     depends_on:
-      postgres:
-        condition: service_healthy
-      ivorioci-stream-service:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+      - db
+      - stream-service
+    environment:
+      PORT: ${GATEWAY_PORT}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      STREAM_SERVICE_URL: ${STREAM_SERVICE_URL}
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
+    networks:
+      - ivorioci-network
 
 volumes:
-  postgres_data:
-    driver: local
+  db_data:
+  stream_videos:
+  stream_thumbnails:
 
-# Réseau interne isolé
 networks:
-  internal:
-    driver: bridge
+  ivorioci-network:
