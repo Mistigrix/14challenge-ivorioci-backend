@@ -14,7 +14,6 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY --from=builder /app/ivorioci-stream-service ./ivorioci-stream-service
-COPY --from=builder /app/storage ./storage
 RUN mkdir -p /app/storage/videos /app/storage/thumbnails
 
 EXPOSE 8080
